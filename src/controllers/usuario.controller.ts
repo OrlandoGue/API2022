@@ -22,6 +22,7 @@ import {UsuarioRepository} from '../repositories';
 import {service} from '@loopback/core';
 import {AuthService} from '../services';
 import axios from 'axios';
+import {configuracion} from '../config/config';
 export class UsuarioController {
   constructor(
     @repository(UsuarioRepository)
@@ -47,43 +48,48 @@ export class UsuarioController {
       },
     })
     usuario: Omit<Usuario, 'id'>,
-  ): Promise<Usuario> {
-   //Creamos la clave antes de guardar el usuario
-   const clave = this.servicioAuth.GenerarClave();
-   const claveCifrada = this.servicioAuth.CifrarClave(clave);
+  ): Promise<Usuario> {const clave = this.servicioAuth.GenerarClave();
+    const claveCifrada = this.servicioAuth.CifrarClave(clave);
+    usuario.Password = claveCifrada;
 
-   // Notificamos al usuario por correo
-   // let destino = usuario.correo;
-   // Notificamos al usuario por telefono y cambiar la url por send_email
-   let destino = usuario.Telefono;
+    let tipo = '';
+    tipo = configuracion.tipoComunicacion; //Definimos el tipo de comunicacion
+    let servicioWeb = '';
+    let destino = '';
 
-   let asunto = 'Registro de usuario en plataforma';
-   let contenido = `Hola, ${usuario.Nombre} ${usuario.Apellidos} su contraseña en el portal es: ${clave}`
-   axios({
-     method: 'post',
-     url: 'http://localhost:5000/send_sms', //Si quiero enviar por correo cambiar a send_email
+    if(tipo == "sms"){
+      destino = usuario.Telefono;
+      servicioWeb = 'send_sms';
+    }else{
+      destino = usuario.Correo;
+      servicioWeb = 'send_email';
+    }
 
-     headers: {
-       'Accept': 'application/json',
-       'Content-Type': 'application/json'
-     },
-     data: {
-       destino: destino,
-       asunto: asunto,
-       contenido: contenido
-     }
-   }).then((data: any) => {
-     console.log(data)
-   }).catch((err: any) => {
-     console.log(err)
-   })
+    const asunto = 'Registro de usuario en plataforma';
+    const contenido = `Hola, ${usuario.Nombre} ${usuario.Apellidos} su contraseña en el portal es: ${clave}`
+    axios({
+      method: 'post',
+      url: configuracion.baseURL + servicioWeb,
 
-   usuario.Password = claveCifrada;
-   //Guardamos el usuario
-   const p = await this.usuarioRepository.create(usuario);
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      data: {
+        destino: destino,
+        asunto: asunto,
+        contenido: contenido
+      }
+    }).then((data) => {
+      console.log(data)
+    }).catch((err) => {
+      console.log(err)
+    });
 
-   return p;
-  }
+    const p = await this.usuarioRepository.create(usuario);
+
+  return p;
+}
 
   @get('/usuarios/count')
   @response(200, {
